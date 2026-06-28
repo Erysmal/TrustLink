@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.local
+artifacts/
+cache/
+ignition/deployments/
+*.log
+.next/
+dist/
