@@ -1,9 +1,12 @@
 import { DealPipeline, StatusBadge } from "../../_components/trustlink-ui";
 import { getDealById, formatAddress, formatAmount, formatDateTime, normalizeDeal } from "../../lib/trustlink";
+import { AuthGuard } from "../../_components/AuthGuard";
+
+type DealPageParams = { id?: string | string[] };
 
 async function fetchDeal(id: string) {
   try {
-    const response = await fetch(`http://localhost:3001/api/deals/${id}`, {
+    const response = await fetch(`http://localhost:3001/api/deals/${encodeURIComponent(id)}`, {
       cache: "no-store",
     });
 
@@ -12,7 +15,16 @@ async function fetchDeal(id: string) {
     }
 
     const raw = (await response.json()) as Record<string, unknown>;
-    return normalizeDeal(raw, id);
+
+    if ("success" in raw && raw.success !== true) {
+      return null;
+    }
+
+    if (!raw.deal || typeof raw.deal !== "object") {
+      return null;
+    }
+
+    return normalizeDeal(raw.deal as Record<string, unknown>, id);
   } catch {
     return null;
   }
@@ -21,24 +33,41 @@ async function fetchDeal(id: string) {
 export default async function DealPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: DealPageParams | Promise<DealPageParams>;
 }) {
-  const { id } = await params;
+  const resolvedParams = await params;
+  const id = Array.isArray(resolvedParams.id) ? resolvedParams.id[0] : resolvedParams.id;
+
+  if (!id) {
+    return (
+      <AuthGuard>
+        <section className="mx-auto w-full max-w-7xl px-6 py-16">
+          <div className="rounded-[28px] border border-white/10 bg-[#0F1629] p-8 text-slate-300">
+            Deal not found.
+          </div>
+        </section>
+      </AuthGuard>
+    );
+  }
+
   const liveDeal = await fetchDeal(id);
   const fallbackDeal = getDealById(id);
   const deal = liveDeal ?? fallbackDeal;
 
   if (!deal) {
     return (
-      <section className="mx-auto w-full max-w-7xl px-6 py-16">
-        <div className="rounded-[28px] border border-white/10 bg-[#0F1629] p-8 text-slate-300">
-          Deal not found.
-        </div>
-      </section>
+      <AuthGuard>
+        <section className="mx-auto w-full max-w-7xl px-6 py-16">
+          <div className="rounded-[28px] border border-white/10 bg-[#0F1629] p-8 text-slate-300">
+            Deal not found.
+          </div>
+        </section>
+      </AuthGuard>
     );
   }
 
   return (
+    <AuthGuard>
     <section className="mx-auto w-full max-w-7xl px-6 py-16">
       <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-[28px] border border-white/10 bg-[#0F1629] p-6 shadow-[0_24px_60px_rgba(0,0,0,0.35)]">
@@ -51,8 +80,9 @@ export default async function DealPage({
             <StatusBadge status={deal.status} />
           </div>
 
-          <div className="mt-8 grid gap-4 sm:grid-cols-3">
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Metric label="Amount" value={`${formatAmount(deal.amount)} USDC`} />
+            <Metric label="Fee" value={`${formatAmount(deal.fee ?? 0)} USDC`} />
             <Metric label="Deadline" value={formatDateTime(deal.deadline)} />
             <Metric label="Channel" value={deal.channel} />
           </div>
@@ -60,12 +90,16 @@ export default async function DealPage({
           <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Deal details</p>
             <dl className="mt-4 grid gap-4 sm:grid-cols-2">
-              <Detail label="Side" value={deal.side} />
+              <Detail label="Deal ID" value={deal.id} />
+              <Detail label="Status" value={deal.status} />
               <Detail label="Buyer" value={formatAddress(deal.buyerAddress)} />
               <Detail label="Seller" value={formatAddress(deal.sellerAddress)} />
-              <Detail label="Escrow" value={deal.escrowAddress ? formatAddress(deal.escrowAddress) : "Pending"} />
+              <Detail label="Amount" value={`${formatAmount(deal.amount)} USDC`} />
+              <Detail label="Fee" value={`${formatAmount(deal.fee ?? 0)} USDC`} />
               <Detail label="Created" value={deal.createdAt ? formatDateTime(deal.createdAt) : "Pending"} />
-              <Detail label="Funded" value={deal.fundedAt ? formatDateTime(deal.fundedAt) : "Pending"} />
+              <Detail label="Delivery deadline" value={formatDateTime(deal.deadline)} />
+              <Detail label="Auto-release" value={deal.autoReleaseAt ? formatDateTime(deal.autoReleaseAt) : "Pending"} />
+              <Detail label="Channel" value={deal.channel} />
             </dl>
           </div>
 
@@ -115,6 +149,7 @@ export default async function DealPage({
         </div>
       </div>
     </section>
+    </AuthGuard>
   );
 }
 

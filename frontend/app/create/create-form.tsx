@@ -3,7 +3,17 @@
 import { useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { Contract, BrowserProvider, isAddress, parseUnits } from "ethers";
+import type { Log, LogDescription } from "ethers";
+import { useAuth } from "@/context/AuthContext";
+import { getMagic } from "@/lib/magic";
 import type { DealChannel } from "../lib/trustlink";
+
+const ESCROW_ADDRESS = "0x1f4505F6d26320ba1157424Abd349a54Ebc9eD90";
+const ESCROW_ABI = [
+  "function createDeal(address buyer, uint256 amount, uint64 deliveryDeadline, string description, string channel) external returns (uint256 dealId)",
+  "event DealCreated(uint256 indexed dealId, address indexed seller, address indexed buyer, uint256 amount, uint256 fee, uint64 deliveryDeadline, uint64 autoReleaseAt, string description, string channel)",
+];
 
 type FormState = {
   buyerAddress: string;
@@ -24,6 +34,7 @@ function toDateTimeLocalValue(date: Date) {
 
 export function CreateDealForm() {
   const router = useRouter();
+  const { walletAddress, loading } = useAuth();
   const [form, setForm] = useState<FormState>(() => {
     const deadline = new Date(Date.now() + 48 * 60 * 60 * 1000);
     return {
@@ -45,36 +56,53 @@ export function CreateDealForm() {
     setMessage(null);
 
     try {
-      const response = await fetch("http://localhost:3001/api/deals/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          buyerAddress: form.buyerAddress,
-          amount: Number(form.amount),
-          deliveryDeadline: new Date(form.deadline).toISOString(),
-          description: form.description,
-          channel: form.channel,
-          asset: "USDC",
-        }),
-      });
+      if (!walletAddress) {
+        throw new Error("Connect your Magic wallet before creating a deal.");
+      }
+      if (!isAddress(form.buyerAddress)) {
+        throw new Error("Enter a valid buyer wallet address.");
+      }
 
-      const raw = await response.text();
-      let data: any = null;
-      if (raw) {
+      const magic = await getMagic();
+      if (!magic) {
+        throw new Error("Magic is not initialized.");
+      }
+
+      const provider = new BrowserProvider(magic.rpcProvider);
+      const signer = await provider.getSigner();
+      const sellerAddress = await signer.getAddress();
+
+      if (sellerAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+        throw new Error("Magic signer does not match the connected seller wallet.");
+      }
+
+      const amount = parseUnits(form.amount, 6);
+      const deadline = Math.floor(new Date(form.deadline).getTime() / 1000);
+      if (!Number.isFinite(deadline) || deadline <= Math.floor(Date.now() / 1000)) {
+        throw new Error("Choose a future delivery deadline.");
+      }
+
+      const escrow = new Contract(ESCROW_ADDRESS, ESCROW_ABI, signer);
+      const tx = await escrow.createDeal(
+        form.buyerAddress,
+        amount,
+        deadline,
+        form.description,
+        form.channel,
+      );
+      const receipt = await tx.wait();
+      const logs = (receipt?.logs ?? []) as Log[];
+      let createdLog: LogDescription | null = null;
+      for (const log of logs) {
         try {
-          data = JSON.parse(raw);
-        } catch {
-          data = { message: raw };
-        }
+          const parsed = escrow.interface.parseLog(log);
+          if (parsed?.name === "DealCreated") {
+            createdLog = parsed;
+            break;
+          }
+        } catch {}
       }
-
-      if (!response.ok) {
-        throw new Error(data?.message || "Unable to create deal.");
-      }
-
-      const dealId = data?.deal?.id ?? data?.id ?? data?.dealId;
+      const dealId = createdLog?.args?.dealId?.toString();
       setMessage(dealId ? `Deal created successfully: ${dealId}` : "Deal created successfully.");
       if (dealId) {
         router.push(`/deal/${dealId}`);
@@ -157,12 +185,14 @@ export function CreateDealForm() {
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || loading || !walletAddress}
           className="inline-flex h-12 items-center justify-center rounded-full bg-[#F59E0B] px-6 text-sm font-semibold text-[#080D1A] transition hover:bg-[#f7b733] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isSubmitting ? "Creating..." : "Create deal"}
         </button>
-        <p className="text-sm text-slate-400">USDC only. Backend response may redirect you to the new deal.</p>
+        <p className="text-sm text-slate-400">
+          Seller: {walletAddress ?? "Connect Magic wallet"} - USDC only.
+        </p>
       </div>
 
       {message ? (
@@ -184,7 +214,7 @@ function Field({
   children,
 }: Readonly<{
   label: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }>) {
   return (
     <label className="grid gap-2 text-sm font-medium text-slate-200">

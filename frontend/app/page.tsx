@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Footer } from "./_components/Footer";
 
 const steps = [
   {
@@ -46,6 +47,12 @@ export default function Home() {
               className="inline-flex h-12 items-center justify-center rounded-full border border-white/10 px-6 text-sm font-semibold text-white transition hover:border-[#F59E0B]/40 hover:bg-white/5"
             >
               Open dashboard
+            </Link>
+	    <Link
+              href="/login"
+              className="inline-flex h-12 items-center justify-center rounded-full border border-[#F59E0B]/40 px-6 text-sm font-semibold text-[#F59E0B] transition hover:bg-[#F59E0B]/10"
+            >
+              Login
             </Link>
           </div>
         </div>
@@ -110,6 +117,7 @@ export default function Home() {
           ))}
         </div>
       </section>
+      <Footer />
     </div>
   );
 }

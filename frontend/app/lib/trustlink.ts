@@ -8,9 +8,11 @@ export interface TrustLinkDeal {
   side: DealSide;
   status: DealStatus;
   amount: number;
+  fee?: number;
   buyerAddress: string;
   sellerAddress: string;
   deadline: string;
+  autoReleaseAt?: string;
   description: string;
   channel: DealChannel;
   createdAt?: string;
@@ -105,32 +107,40 @@ export const sampleDeals: TrustLinkDeal[] = [
 
 export const statusOrder = STATUS_ORDER;
 
-export function normalizeDeal(raw: Record<string, unknown> | null | undefined, fallbackId: string): TrustLinkDeal {
+export function normalizeDeal(rawInput: Record<string, unknown> | null | undefined, fallbackId: string): TrustLinkDeal {
+  const raw = rawInput && typeof rawInput.deal === "object" && rawInput.deal !== null
+    ? (rawInput.deal as Record<string, unknown>)
+    : rawInput;
+  const id = toString(raw?.dealId ?? raw?.id ?? fallbackId) || fallbackId;
   const amount = toNumber(
     raw?.amount ?? raw?.usdcAmount ?? raw?.value ?? raw?.escrowAmount ?? raw?.total,
   );
+  const fee = toNumber(raw?.fee ?? raw?.platformFee ?? raw?.escrowFee);
   const channel = normalizeChannel(raw?.channel ?? raw?.deliveryChannel ?? raw?.platform);
   const side = normalizeSide(raw?.side ?? raw?.direction ?? raw?.role);
   const status = normalizeStatus(raw?.status ?? raw?.state ?? raw?.dealStatus);
   const deadline = toString(
-    raw?.deadline ?? raw?.deliveryDeadline ?? raw?.dueDate ?? raw?.targetDate,
+    raw?.deliveryDeadline ?? raw?.deadline ?? raw?.dueDate ?? raw?.targetDate,
   );
+  const autoReleaseAt = toString(raw?.autoReleaseAt ?? raw?.autoRelease ?? raw?.releaseAt);
   const description = toString(raw?.description ?? raw?.details ?? raw?.memo ?? raw?.notes);
-  const title = toString(raw?.title ?? raw?.name ?? raw?.label) || `Deal ${fallbackId}`;
+  const title = toString(raw?.title ?? raw?.name ?? raw?.label) || `Deal ${id}`;
 
   return {
-    id: toString(raw?.id ?? raw?.dealId ?? fallbackId) || fallbackId,
+    id,
     title,
     side,
     status,
     amount,
+    fee,
     buyerAddress:
-      toString(raw?.buyerAddress ?? raw?.buyer ?? raw?.counterpartyAddress ?? raw?.clientAddress) ||
+      toString(raw?.buyer ?? raw?.buyerAddress ?? raw?.counterpartyAddress ?? raw?.clientAddress) ||
       "0x0000000000000000000000000000000000000000",
     sellerAddress:
-      toString(raw?.sellerAddress ?? raw?.seller ?? raw?.merchantAddress ?? raw?.providerAddress) ||
+      toString(raw?.seller ?? raw?.sellerAddress ?? raw?.merchantAddress ?? raw?.providerAddress) ||
       "0x0000000000000000000000000000000000000000",
     deadline: deadline || new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+    autoReleaseAt,
     description: description || "Escrow deal details will appear here once the backend responds.",
     channel,
     createdAt: toString(raw?.createdAt ?? raw?.created_at ?? raw?.openedAt),
@@ -148,11 +158,11 @@ export function getDealById(id: string) {
 
 export function normalizeStatus(value: unknown): DealStatus {
   const normalized = toString(value).toLowerCase();
-  if (normalized === "funded") return "Funded";
-  if (normalized === "completed" || normalized === "complete" || normalized === "released") {
+  if (normalized === "1" || normalized === "funded") return "Funded";
+  if (normalized === "2" || normalized === "4" || normalized === "completed" || normalized === "complete" || normalized === "released" || normalized === "resolved") {
     return "Completed";
   }
-  if (normalized === "disputed" || normalized === "dispute" || normalized === "challenged") {
+  if (normalized === "3" || normalized === "disputed" || normalized === "dispute" || normalized === "challenged") {
     return "Disputed";
   }
   return "Created";

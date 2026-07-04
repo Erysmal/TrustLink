@@ -25,20 +25,20 @@ app.get("/health", (req, res) => {
 // ─── Escrow REST API (used by web frontend) ───────────────────────────────────
 
 // GET /api/deals/:id — get a single deal
-app.get("/api/deals/:id", async (req, res) => {
-  try {
-    const deal = await escrow.getDeal(req.params.id);
-    res.json({ success: true, deal });
-  } catch (err) {
-    res.status(400).json({ success: false, error: err.message });
-  }
-});
-
 // GET /api/deals/count — total deals created
 app.get("/api/deals/count", async (req, res) => {
   try {
     const count = await escrow.getDealCount();
     res.json({ success: true, count });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/deals/:id", async (req, res) => {
+  try {
+    const deal = await escrow.getDeal(req.params.id);
+    res.json({ success: true, deal });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
   }
