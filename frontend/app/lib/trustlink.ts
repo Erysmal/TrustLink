@@ -108,9 +108,7 @@ export const sampleDeals: TrustLinkDeal[] = [
 export const statusOrder = STATUS_ORDER;
 
 export function normalizeDeal(rawInput: Record<string, unknown> | null | undefined, fallbackId: string): TrustLinkDeal {
-  const raw = rawInput && typeof rawInput.deal === "object" && rawInput.deal !== null
-    ? (rawInput.deal as Record<string, unknown>)
-    : rawInput;
+  const raw = rawInput ?? {};
   const id = toString(raw?.dealId ?? raw?.id ?? fallbackId) || fallbackId;
   const amount = toNumber(
     raw?.amount ?? raw?.usdcAmount ?? raw?.value ?? raw?.escrowAmount ?? raw?.total,
